@@ -96,6 +96,24 @@ check_supervisor() {
   ok "supervision et redémarrage"
 }
 
+check_forges() {
+  if ! in_claude '[[ -n "${GH_TOKEN:-}" && -n "${SMOKE_GITHUB_REPO:-}" ]]'; then
+    warn "GitHub non testé : GH_TOKEN ou SMOKE_GITHUB_REPO absent de .env"
+  else
+    in_claude 'GIT_TERMINAL_PROMPT=0 git ls-remote "https://github.com/${SMOKE_GITHUB_REPO}.git" HEAD' >/dev/null \
+      || fail "ls-remote GitHub refusé"
+    in_claude 'gh api user --jq .login' >/dev/null || fail "gh ne s'authentifie pas avec GH_TOKEN"
+    ok "GitHub"
+  fi
+  if ! in_claude '[[ -n "${FORGEJO_URL:-}" && -n "${FORGEJO_TOKEN:-}" && -n "${SMOKE_FORGEJO_REPO:-}" ]]'; then
+    warn "Forgejo non testé : FORGEJO_URL, FORGEJO_TOKEN ou SMOKE_FORGEJO_REPO absent de .env"
+  else
+    in_claude 'GIT_TERMINAL_PROMPT=0 git ls-remote "${FORGEJO_URL%/}/${SMOKE_FORGEJO_REPO}.git" HEAD' >/dev/null \
+      || fail "ls-remote Forgejo refusé"
+    ok "Forgejo"
+  fi
+}
+
 sections=("$@")
 ((${#sections[@]})) || sections=(toolchains docker ports guards supervisor forges)
 for section in "${sections[@]}"; do
