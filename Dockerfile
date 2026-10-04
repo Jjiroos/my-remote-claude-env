@@ -71,3 +71,12 @@ RUN curl --proto '=https' -fsSL https://sh.rustup.rs \
       | sh -s -- -y --no-modify-path --profile minimal -c clippy -c rustfmt
 RUN curl -fsSL https://claude.ai/install.sh | bash
 WORKDIR /workspace
+ENV RC_NAME=piserv-dev \
+    RESTART_DELAY=10 \
+    CLAUDE_CONFIG_REPO=https://github.com/Jjiroos/my-claude-config.git \
+    CLAUDE_CONFIG_CHECKOUT=/home/dev/my-claude-config \
+    FORGEJO_USER=claude-bot \
+    GIT_USER_NAME="Claude (piserv-dev)" \
+    GIT_USER_EMAIL=claude-bot@localhost
+COPY --chmod=0755 entrypoint.sh supervisor.sh /usr/local/bin/
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

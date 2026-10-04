@@ -1,0 +1,52 @@
+# my-claude-env : Claude Code en Remote Control (claude) et démon Docker isolé (dind).
+# claude partage l'espace réseau de dind : le démon, les serveurs de dev natifs et les
+# ports publiés par les conteneurs internes sont tous sur localhost.
+name: my-claude-env
+
+services:
+  dind:
+    image: docker:dind
+    privileged: true
+    hostname: claude-env
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    # Sans TLS, mais seulement sur la boucle locale de l'espace réseau partagé avec claude.
+    # "dockerd" en tête : sinon l'entrypoint de l'image ajoute --host=tcp://0.0.0.0:2375.
+    command: ["dockerd", "--host=unix:///var/run/docker.sock", "--host=tcp://127.0.0.1:2375", "--tls=false"]
+    volumes:
+      - dind-data:/var/lib/docker
+    ports:
+      - "127.0.0.1:${PORT_RANGE:-4100-4119}:${PORT_RANGE:-4100-4119}"
+    mem_limit: ${DIND_MEM:-2g}
+    healthcheck:
+      test: ["CMD", "docker", "-H", "tcp://127.0.0.1:2375", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  claude:
+    build: .
+    image: my-claude-env:latest
+    network_mode: service:dind
+    init: true
+    restart: unless-stopped
+    depends_on:
+      dind:
+        condition: service_healthy
+        restart: true
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DOCKER_HOST: tcp://127.0.0.1:2375
+    volumes:
+      - home:/home/dev
+      - workspace:/workspace
+    mem_limit: ${CLAUDE_MEM:-3g}
+    cpus: ${CLAUDE_CPUS:-3}
+
+volumes:
+  home:
+  workspace:
+  dind-data:
