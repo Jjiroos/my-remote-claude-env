@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # smoke-test.sh — vérifie my-claude-env de bout en bout, depuis l'hôte.
-# Usage : scripts/smoke-test.sh [toolchains|docker|ports|guards|supervisor|forges]...
+# Usage : scripts/smoke-test.sh [toolchains|docker|ports|guards|plugins|supervisor|dind_restart|forges]...
 # Sans argument, lance toutes les sections. S'arrête au premier échec.
 # shellcheck disable=SC2016  # commandes exécutées dans le conteneur : $ volontairement non développé ici
 set -euo pipefail
@@ -72,6 +72,29 @@ check_guards() {
   ok "garde-fous de l'entrypoint"
 }
 
+check_plugins() {
+  local plugins
+  plugins="$(in_claude 'claude plugin list 2>&1')"
+  for plugin in superpowers mattpocock-skills; do
+    grep -q "$plugin" <<<"$plugins" || fail "plugin $plugin absent : install.sh de my-claude-config incomplet"
+  done
+  ok "plugins de my-claude-config"
+}
+
+check_dind_restart() {
+  # Un redémarrage de dind hors compose (OOM, crash) crée un nouvel espace réseau :
+  # claude doit sortir et être relancé dedans par la politique de redémarrage.
+  docker restart "$(docker compose ps -q dind)" >/dev/null
+  for _ in {1..90}; do
+    in_claude 'docker info >/dev/null 2>&1 && tmux has-session -t claude' 2>/dev/null && {
+      ok "reprise après redémarrage de dind"
+      return 0
+    }
+    sleep 2
+  done
+  fail "claude n'a pas retrouvé le démon dind après son redémarrage"
+}
+
 count_starts() { in_claude 'grep -c " démarrage$" ~/supervisor.log || true'; }
 
 wait_for_more_starts() {
@@ -115,7 +138,7 @@ check_forges() {
 }
 
 sections=("$@")
-((${#sections[@]})) || sections=(toolchains docker ports guards supervisor forges)
+((${#sections[@]})) || sections=(toolchains docker ports guards plugins supervisor dind_restart forges)
 for section in "${sections[@]}"; do
   "check_$section"
 done
