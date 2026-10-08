@@ -17,15 +17,20 @@ scripts/smoke-test.sh
 
 ## Premier login (une fois)
 
-Remote Control demande un terminal la première fois :
+Depuis un vrai terminal sur piserv (SSH), pas depuis le préfixe `!` de Claude Code, qui n'a
+pas de TTY. Le tmux ne contient que le serveur `claude remote-control`, qui sort tant que le
+conteneur n'est pas connecté : la connexion se fait donc à part.
 
 ```bash
+docker compose exec claude claude auth login   # abonnement claude.ai, pas de clé API
 docker compose exec claude tmux attach -t claude
 ```
 
-Dans tmux : `/login` avec le compte claude.ai (abonnement requis, pas de clé API), puis
-accepter « Trust /workspace? », « Enable Remote Control? » et l'avertissement du mode
-bypass. Détacher avec `Ctrl-b d`. La session `piserv-dev` apparaît alors dans claude.ai/code.
+Le login ouvre une URL à valider dans le navigateur, puis attend le code à coller. Dans
+tmux, au plus 10 s plus tard, le serveur redémarre et demande « Trust /workspace? »,
+« Enable Remote Control? » et l'avertissement du mode bypass : répondre `y`. Détacher avec
+`Ctrl-b d`, jamais `Ctrl-c`. La session `piserv-dev` apparaît alors dans claude.ai/code.
+`docker compose exec claude claude auth status` doit répondre `"loggedIn": true`.
 
 ## Usage
 
