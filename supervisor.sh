@@ -4,6 +4,9 @@
 set -uo pipefail
 
 log="$HOME/supervisor.log"
+# Un Ctrl-c dans tmux arrête claude ou le sleep, jamais la boucle : sans ce trap, bash
+# sort avec un enfant tué par SIGINT, ce qui ferme tmux et redémarre le conteneur.
+trap ':' INT
 cd /workspace || exit 1
 
 while true; do

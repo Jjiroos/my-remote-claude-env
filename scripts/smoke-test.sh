@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # smoke-test.sh — vérifie my-claude-env de bout en bout, depuis l'hôte.
-# Usage : scripts/smoke-test.sh [toolchains|docker|ports|guards|plugins|supervisor|dind_restart|forges]...
+# Usage : scripts/smoke-test.sh [toolchains|docker|ports|guards|plugins|supervisor|ctrl_c|dind_restart|forges]...
 # Sans argument, lance toutes les sections. S'arrête au premier échec.
 # shellcheck disable=SC2016  # commandes exécutées dans le conteneur : $ volontairement non développé ici
 set -euo pipefail
@@ -81,6 +81,22 @@ check_plugins() {
   ok "plugins de my-claude-config"
 }
 
+check_ctrl_c() {
+  # Un Ctrl-c dans tmux arrête claude remote-control, pas la boucle ni le conteneur.
+  local container restarts before
+  container="$(docker compose ps -q claude)"
+  restarts="$(docker inspect -f '{{.RestartCount}}' "$container")"
+  wait_for_stable_server
+  before="$(count_starts)"
+  # Le second Ctrl-c tombe pendant le sleep de relance : c'est lui qui tuait la boucle.
+  in_claude 'tmux send-keys -t claude C-c; sleep 3; tmux send-keys -t claude C-c'
+  wait_for_more_starts "$before" || fail "la boucle n'a pas relancé claude remote-control après Ctrl-c"
+  [[ "$(docker inspect -f '{{.RestartCount}}' "$container")" == "$restarts" ]] \
+    || fail "Ctrl-c a redémarré le conteneur"
+  in_claude 'tmux has-session -t claude' || fail "session tmux fermée par Ctrl-c"
+  ok "Ctrl-c sans redémarrage"
+}
+
 check_dind_restart() {
   # Un redémarrage de dind hors compose (OOM, crash) crée un nouvel espace réseau :
   # claude doit sortir et être relancé dedans par la politique de redémarrage.
@@ -106,9 +122,21 @@ wait_for_more_starts() {
   return 1
 }
 
+# Un serveur qui démarre encore ignore SIGTERM et SIGINT : on attend STABLE_SECONDS de vie.
+readonly STABLE_SECONDS=10
+wait_for_stable_server() {
+  for _ in {1..60}; do
+    in_claude 'pid="$(pgrep -f "[c]laude remote-control" | head -1)"; [[ -n "$pid" ]] && (( $(ps -o etimes= -p "$pid") >= '"$STABLE_SECONDS"' ))' \
+      && return 0
+    sleep 1
+  done
+  fail "claude remote-control jamais stable"
+}
+
 check_supervisor() {
   in_claude 'tmux has-session -t claude' || fail "session tmux claude absente"
   local before
+  wait_for_stable_server
   before="$(count_starts)"
   in_claude 'pkill -f "[c]laude remote-control" || true'  # [c] : le motif ne tue pas ce shell
   wait_for_more_starts "$before" || fail "la boucle n'a pas relancé claude remote-control"
@@ -138,7 +166,7 @@ check_forges() {
 }
 
 sections=("$@")
-((${#sections[@]})) || sections=(toolchains docker ports guards plugins supervisor dind_restart forges)
+((${#sections[@]})) || sections=(toolchains docker ports guards plugins supervisor ctrl_c dind_restart forges)
 for section in "${sections[@]}"; do
   "check_$section"
 done
