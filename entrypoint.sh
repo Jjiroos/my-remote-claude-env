@@ -44,11 +44,6 @@ else
   git clone -q "$CLAUDE_CONFIG_REPO" "$CLAUDE_CONFIG_CHECKOUT" \
     || echo "entrypoint : clone de my-claude-config impossible, démarrage sans cette config" >&2
 fi
-# Sur un home neuf, la marketplace officielle manque et install.sh n'ajoute que les tierces.
-if ! claude plugin marketplace list 2>/dev/null | grep -q 'claude-plugins-official'; then
-  claude plugin marketplace add anthropics/claude-plugins-official >/dev/null 2>&1 \
-    || echo "entrypoint : marketplace claude-plugins-official injoignable, plugins officiels absents" >&2
-fi
 if [[ -x "$CLAUDE_CONFIG_CHECKOUT/install.sh" ]]; then
   "$CLAUDE_CONFIG_CHECKOUT/install.sh" >"$HOME/install-config.log" 2>&1 \
     || echo "entrypoint : install.sh de my-claude-config en échec, voir ~/install-config.log" >&2

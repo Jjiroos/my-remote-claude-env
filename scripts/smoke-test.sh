@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # smoke-test.sh — vérifie my-claude-env de bout en bout, depuis l'hôte.
-# Usage : scripts/smoke-test.sh [toolchains|docker|ports|guards|plugins|supervisor|ctrl_c|dind_restart|forges]...
+# Usage : scripts/smoke-test.sh [toolchains|docker|ports|guards|plugins|fresh_home|supervisor|ctrl_c|dind_restart|forges]...
 # Sans argument, lance toutes les sections. S'arrête au premier échec.
 # shellcheck disable=SC2016  # commandes exécutées dans le conteneur : $ volontairement non développé ici
 set -euo pipefail
@@ -111,6 +111,18 @@ check_dind_restart() {
   fail "claude n'a pas retrouvé le démon dind après son redémarrage"
 }
 
+check_fresh_home() {
+  # Home neuf (volume jetable) : install.sh de my-claude-config doit installer seul les plugins.
+  local volume=my-claude-env-smoke-home out
+  docker volume rm -f "$volume" >/dev/null
+  out="$(docker run --rm -v "$volume:/home/dev" "$IMAGE" claude plugin list 2>&1)" || true
+  docker volume rm -f "$volume" >/dev/null
+  for plugin in superpowers mattpocock-skills; do
+    grep -q "$plugin" <<<"$out" || fail "home neuf : plugin $plugin absent"
+  done
+  ok "plugins sur un home neuf"
+}
+
 count_starts() { in_claude 'grep -c " démarrage$" ~/supervisor.log || true'; }
 
 wait_for_more_starts() {
@@ -166,7 +178,7 @@ check_forges() {
 }
 
 sections=("$@")
-((${#sections[@]})) || sections=(toolchains docker ports guards plugins supervisor ctrl_c dind_restart forges)
+((${#sections[@]})) || sections=(toolchains docker ports guards plugins fresh_home supervisor ctrl_c dind_restart forges)
 for section in "${sections[@]}"; do
   "check_$section"
 done
