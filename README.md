@@ -15,7 +15,7 @@ docker compose up -d --build
 scripts/smoke-test.sh
 ```
 
-## Premier login (une fois)
+## Login (à refaire tous les 30 jours environ)
 
 Depuis un vrai terminal sur piserv (SSH), pas depuis le préfixe `!` de Claude Code, qui n'a
 pas de TTY. Le tmux ne contient que le serveur `claude remote-control`, qui sort tant que le
@@ -31,6 +31,16 @@ tmux, au plus 10 s plus tard, le serveur redémarre et demande « Trust /workspa
 « Enable Remote Control? » et l'avertissement du mode bypass : répondre `y`. Détacher avec
 `Ctrl-b d`, jamais `Ctrl-c`. La session `piserv-dev` apparaît alors dans claude.ai/code.
 `docker compose exec claude claude auth status` doit répondre `"loggedIn": true`.
+
+Le refresh token expire à date fixe, environ 30 jours après le login. Passé cette date,
+Claude Code vide les tokens, `auth status` répond `"loggedIn": false` et les sessions
+échouent sur `Failed to refresh session … token`. Il faut alors refaire le login ci-dessus.
+Pour connaître la prochaine échéance :
+
+```bash
+docker compose exec claude jq -r '.claudeAiOauth.refreshTokenExpiresAt / 1000 | todate' \
+  /home/dev/.claude/.credentials.json
+```
 
 ## Usage
 
