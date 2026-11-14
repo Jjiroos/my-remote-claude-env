@@ -5,17 +5,22 @@ name: my-claude-env
 
 services:
   dind:
-    image: docker:dind
+    # Rootless : privileged sert à rootlesskit, mais le démon tourne sous l'utilisateur
+    # rootless. Un conteneur --privileged lancé depuis claude n'atteint pas l'hôte.
+    image: docker:dind-rootless
     privileged: true
     hostname: claude-env
     restart: unless-stopped
     environment:
       DOCKER_TLS_CERTDIR: ""
-    # Sans TLS, mais seulement sur la boucle locale de l'espace réseau partagé avec claude.
-    # "dockerd" en tête : sinon l'entrypoint de l'image ajoute --host=tcp://0.0.0.0:2375.
-    command: ["dockerd", "--host=unix:///var/run/docker.sock", "--host=tcp://127.0.0.1:2375", "--tls=false"]
+      # Le démon vit dans l'espace réseau de rootlesskit ; seul ce port le relie à celui
+      # partagé avec claude, et sur la boucle locale seulement.
+      DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS: "-p 127.0.0.1:2375:2375/tcp"
+    # Sans TLS, sur la boucle locale. "dockerd" en tête : sinon l'entrypoint publie 0.0.0.0:2375.
+    command: ["dockerd", "--host=unix:///run/user/1000/docker.sock", "--host=tcp://127.0.0.1:2375", "--tls=false"]
     volumes:
-      - dind-data:/var/lib/docker
+      # Volume neuf : dind-data, écrit par l'ancien démon root, reste intact mais inutilisé.
+      - dind-rootless-data:/home/rootless/.local/share/docker
     ports:
       - "127.0.0.1:${PORT_RANGE:-4100-4119}:${PORT_RANGE:-4100-4119}"
     mem_limit: ${DIND_MEM:-2g}
@@ -49,4 +54,4 @@ services:
 volumes:
   home:
   workspace:
-  dind-data:
+  dind-rootless-data:

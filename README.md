@@ -3,7 +3,9 @@
 Claude Code tourne en permanence sur piserv, dans un conteneur, et se pilote depuis
 [claude.ai/code](https://claude.ai/code) ou l'app mobile (Remote Control). Il a les mains
 libres dans le conteneur (`bypassPermissions`, `sudo`) et aucun accès à la prod : démon
-Docker séparé (`dind`), aucun montage de l'hôte, ports publiés en local seulement.
+Docker séparé et rootless (`dind`), aucun montage de l'hôte, ports publiés en local
+seulement. Rootless, un conteneur `--privileged` lancé depuis Claude n'atteint pas l'hôte ;
+en contrepartie, `docker run --memory` et `--cpus` sont sans effet dans `dind`.
 
 Design : [spec](docs/superpowers/specs/2026-10-04-my-claude-env-design.md).
 

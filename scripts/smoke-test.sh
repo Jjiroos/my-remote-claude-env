@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # smoke-test.sh — vérifie my-claude-env de bout en bout, depuis l'hôte.
-# Usage : scripts/smoke-test.sh [toolchains|docker|ports|guards|plugins|fresh_home|supervisor|ctrl_c|dind_restart|forges]...
+# Usage : scripts/smoke-test.sh [toolchains|docker|escape|ports|guards|plugins|fresh_home|supervisor|ctrl_c|dind_restart|forges]...
 # Sans argument, lance toutes les sections. S'arrête au premier échec.
 # shellcheck disable=SC2016  # commandes exécutées dans le conteneur : $ volontairement non développé ici
 set -euo pipefail
@@ -40,6 +40,18 @@ check_docker() {
   in_claude 'grep -qE "^ *[0-9]+: 0100007F:0947 " /proc/net/tcp' || fail "démon absent de 127.0.0.1:2375"
   in_claude 'grep -qE "^ *[0-9]+: 00000000:0947 " /proc/net/tcp' && fail "démon Docker à l'écoute sur 0.0.0.0:2375"
   ok "docker isolé"
+}
+
+check_escape() {
+  # dind est privilégié : avec un démon root, un conteneur --privileged lancé depuis claude
+  # lit le disque de l'hôte. Le démon rootless le confine à l'utilisateur rootless de dind.
+  local root_dev
+  root_dev="$(findmnt -no SOURCE /)"
+  in_claude 'docker info --format "{{.SecurityOptions}}"' | grep -q 'name=rootless' \
+    || fail "le démon dind n'est pas rootless"
+  in_claude "docker run --rm --privileged alpine head -c 1 $root_dev" >/dev/null 2>&1 \
+    && fail "un conteneur privilégié lit le disque de l'hôte ($root_dev)"
+  ok "pas d'accès au disque de l'hôte"
 }
 
 check_ports() {
@@ -178,7 +190,7 @@ check_forges() {
 }
 
 sections=("$@")
-((${#sections[@]})) || sections=(toolchains docker ports guards plugins fresh_home supervisor ctrl_c dind_restart forges)
+((${#sections[@]})) || sections=(toolchains docker escape ports guards plugins fresh_home supervisor ctrl_c dind_restart forges)
 for section in "${sections[@]}"; do
   "check_$section"
 done
